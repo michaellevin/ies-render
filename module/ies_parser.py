@@ -30,10 +30,14 @@ IESData = namedtuple(
 
 
 class IES_Parser:
+    """_summary_
+    Eager parsing IES file and return IESData namedtuple
+    """
+
     def __init__(self, ies_path: str):
-        self.ies_path = ies_path
-        if ies_path and os.path.exists(self.ies_path):
-            self.ies_data = self._parse()
+        self._ies_path = ies_path
+        if self._ies_path and os.path.exists(self._ies_path):
+            self._ies_data = self._parse()
         else:
             raise FileNotFoundError("IES file not found")
 
@@ -41,7 +45,7 @@ class IES_Parser:
         def _parse_line(line: str) -> deque:
             return deque(map(float, line.split()))
 
-        with open(self.ies_path, "r") as f:
+        with open(self._ies_path, "r") as f:
             for line in f:
                 if line.strip() == "TILT=NONE":
                     break
@@ -142,7 +146,14 @@ class IES_Parser:
                 shape,
             )
 
+    @property
+    def ies_data(self) -> IESData:
+        return self._ies_data
+
     def __repr__(self) -> str:
+        if not self._ies_data:
+            return "Broken file"
+
         bold = "\033[1m"
         underline = "\033[4m"
         red = "\033[91m"  # Red color
@@ -150,19 +161,19 @@ class IES_Parser:
         yellow = "\033[93m"  # Yellow color
         blue = "\033[94m"  # Blue color
         reset = "\033[0m"
-        message = f"IES file: {underline}{blue}{self.ies_path}{reset}\n"
-        message += f"{bold}Shape:\t{self.ies_data.shape}, L={self.ies_data.length}m, H={self.ies_data.height}m{reset}\n"
-        vert_str = f"{self.ies_data.vertical_angles[0]}, {self.ies_data.vertical_angles[1]}, ... {self.ies_data.vertical_angles[-1]} [{len(self.ies_data.vertical_angles)} values]\n"
+        message = f"IES file: {underline}{blue}{self._ies_path}{reset}\n"
+        message += f"{bold}Shape:\t{self._ies_data.shape}, L={self._ies_data.length}m, H={self._ies_data.height}m{reset}\n"
+        vert_str = f"{self._ies_data.vertical_angles[0]}, {self._ies_data.vertical_angles[1]}, ... {self._ies_data.vertical_angles[-1]} [{len(self.ies_data.vertical_angles)} values]\n"
         message += f"{bold}{underline}{green}Vertical:{reset}\n\t" + vert_str
 
-        if len(self.ies_data.horizontal_angles) == 1:
-            hor_str = f"{self.ies_data.horizontal_angles[0]}\n"
+        if len(self._ies_data.horizontal_angles) == 1:
+            hor_str = f"{self._ies_data.horizontal_angles[0]}\n"
             message += f"{bold}{underline}{green}Horizontal:{reset}\n\t" + hor_str
             message += f"{bold}{underline}{green}Candela:{reset}\n\t" + ", ".join(
-                map(str, self.ies_data.candela_values[0.0])
+                map(str, self._ies_data.candela_values[0.0])
             )
         else:
-            hor_str = f"{self.ies_data.horizontal_angles[0]}, {self.ies_data.horizontal_angles[1]}, ... {self.ies_data.horizontal_angles[-1]} [{len(self.ies_data.horizontal_angles)} values]\n"
+            hor_str = f"{self._ies_data.horizontal_angles[0]}, {self._ies_data.horizontal_angles[1]}, ... {self._ies_data.horizontal_angles[-1]} [{len(self.ies_data.horizontal_angles)} values]\n"
             # hor_str = (
             #     str(self.ies_data.horizontal_angles)
             #     + " "
@@ -171,16 +182,20 @@ class IES_Parser:
             message += f"{bold}{underline}{green}Horizontal:{reset}\n\t" + hor_str
 
             message += f"{bold}{underline}{green}Candela:{reset}\n"
-            start_h = self.ies_data.horizontal_angles[0]
-            end_h = self.ies_data.horizontal_angles[-1]
+            start_h = self._ies_data.horizontal_angles[0]
+            end_h = self._ies_data.horizontal_angles[-1]
             message += f"\t{bold}{yellow}{int(start_h)}:{reset}\t" + ", ".join(
-                map(str, self.ies_data.candela_values[start_h])
+                map(str, self._ies_data.candela_values[start_h])
             )
             message += f"\n\t{bold}...{reset}\n"
             message += f"\n\t{bold}{yellow}{int(end_h)}:{reset}\t" + ", ".join(
-                map(str, self.ies_data.candela_values[end_h])
+                map(str, self._ies_data.candela_values[end_h])
             )
+            message += "\n"
         return message
+
+    def __call__(self) -> IESData:
+        return self._ies_data
 
 
 if __name__ == "__main__":

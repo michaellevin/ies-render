@@ -1,56 +1,124 @@
 import typing
-from collections import namedtuple
-import math
-import numpy as np
-from scipy.interpolate import interp1d
-from PIL import Image, ImageFilter  # , ImageEnhance
+from PIL import ImageFilter  # , ImageEnhance
+
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 try:
-    from . import ies_parser
-    from . import utils
-except ImportError:
-    import ies_parser
-    import utils
+    from .utils import timing_decorator
+    from .ies_parser import IES_Parser, IESData, BrokenIESFileError
 
-PolarCoordinates = namedtuple("PolarCoordinates", ["r", "theta"])
+    # from .ies_polar import IESPolar, PolarCoordinates
+    from ._ies_render_strategy import (
+        RenderStrategy,
+        Render0,
+        Render0_90,
+        Render0_180,
+        Render0_360,
+    )
+except ImportError:
+    from utils import timing_decorator
+    from ies_parser import IES_Parser, IESData, BrokenIESFileError
+
+    # from ies_polar import IESPolar, PolarCoordinates
+    from _ies_render_strategy import (
+        RenderStrategy,
+        Render0,
+        Render0_90,
+        Render0_180,
+        Render0_360,
+    )
 
 
 class IES_Thumbnail_Generator:
-    def __init__(self, ies_path: str, h_angle: float = 0, size: int = 512):
-        self.ies_path = ies_path
-        self.ies_parser = None
+    def __init__(self, ies_path: str):
+        self._ies_path = None
+        self._ies_data = None
+        self._populate(ies_path)
+
+        if self._ies_data:
+            self.render_strategy = self._create_render_strategy(self._ies_data)
+
+    @property
+    def ies_path(self):
+        return self._ies_path
+
+    @property
+    def ies_data(self):
+        return self._ies_data
+
+    def _populate(self, ies_path: str) -> IESData | None:
+        self._ies_path = ies_path
         try:
-            self.ies_parser = ies_parser.IES_Parser(self.ies_path)
-        except (FileNotFoundError, ies_parser.BrokenIESFileError) as e:
-            print(e)
-        print(self.ies_parser)
+            ies_parser = IES_Parser(ies_path)
+            logging.info(ies_parser)
+            self._ies_data = ies_parser.ies_data
+            return self._ies_data
+        except (FileNotFoundError, BrokenIESFileError) as err:
+            logging.error(err)
+            return None
 
-        self.wall_size = 5  # meters
+    def _create_render_strategy(self, ies_data: IESData) -> RenderStrategy:
+        horizontal_angle_last = int(ies_data.horizontal_angles[-1])
+        if horizontal_angle_last == 0:
+            # the luminaire is assumed to be laterally symmetric in all planes
+            return Render0(ies_data)
+        elif horizontal_angle_last == 90:
+            # the luminaire is assumed to be symmetric in each quadrant.
+            return Render0_90(ies_data)
+        elif horizontal_angle_last == 180:
+            # the luminaire is assumed to be symmetric about the 0 to 180 degree plane
+            return Render0_180(ies_data)
+        elif 180 < horizontal_angle_last <= 360:
+            # the luminaire is assumed to exhibit no lateral symmetry
+            return Render0_360(ies_data)
 
-        self.size = size
-        self.center = size / 2
-        self.pixel_size = self.wall_size / self.size  # 5/512 = 0.009m (1 pixel ~ 1cm)
+    @timing_decorator
+    def render(
+        self,
+        size: typing.Optional[int] = 512,
+        horizontal_angle: typing.Optional[float] = 0.0,
+        distance: typing.Optional[float] = 0.0,
+        blur_radius: typing.Optional[float] = 1,
+        save: bool = True,
+        out_path: typing.Optional[str] = None,
+    ):
+        logging.info(f" Rendering '{self.ies_path}' with size {size}...")
+        image = self.render_strategy.render(
+            size=size, horizontal_angle=horizontal_angle, distance=distance
+        )
 
-        # if self.ies_parser:
-        #     self._generate(h_angle)
+        if blur_radius:
+            image = image.filter(ImageFilter.GaussianBlur(blur_radius))
 
-    @utils.timing_decorator
+        if save:
+            if not out_path:
+                out_path = self.ies_path.replace(
+                    ".ies", f"_s{size}_d{distance}_h{horizontal_angle}.png"
+                )
+            image.save(out_path)
+            logging.info(f"Saved image to {out_path}")
+
+    """
+    @timing_decorator
     def generate(
         self,
         size: typing.Optional[int] = None,
         horizontal_angle: typing.Optional[float] = None,
         distance: typing.Optional[float] = None,
         blur_radius: typing.Optional[float] = None,
-        out_path: typing.Optional[str] = None,
         save: bool = True,
+        out_path: typing.Optional[str] = None,
     ):
         if size:
             self.size = size
             self.center = size / 2
             self.pixel_size = self.wall_size / self.size
+
         # * Preparations
         #   - if height != 0
-        light_height = self.ies_parser.ies_data.height
+        light_height = self.ies_data.ies_data.height
         light_height_in_pixels = light_height / self.pixel_size
         if light_height != 0:
             light_top_border = self.center - light_height_in_pixels / 2
@@ -58,8 +126,8 @@ class IES_Thumbnail_Generator:
 
         #   - get vertical range
         start_v_angle, end_v_angle = (
-            int(self.ies_parser.ies_data.vertical_angles[0]),
-            int(self.ies_parser.ies_data.vertical_angles[-1]),
+            int(self.ies_data.ies_data.vertical_angles[0]),
+            int(self.ies_data.ies_data.vertical_angles[-1]),
         )
         #  - get horizontal (azimuthal) range
         if start_v_angle == 0 and end_v_angle == 90:  # V ∈ [0, 90]
@@ -74,22 +142,21 @@ class IES_Thumbnail_Generator:
 
         # * Generate the image
         image = Image.new("RGB", (self.size, self.size))
-        axial_symmetry = len(self.ies_parser.ies_data.horizontal_angles) == 1
+        axial_symmetry = len(self.ies_data.ies_data.horizontal_angles) == 1
         if axial_symmetry:  # H = 0
             # the distribution is axially symmetric
-            candela_values = self.ies_parser.ies_data.candela_values[0.0]
+            candela_values = self.ies_data.ies_data.candela_values[0.0]
             L_max = max(candela_values)
             x_start, x_end = self.size // 2, self.size
 
             interpolation = interp1d(
-                self.ies_parser.ies_data.vertical_angles,
+                self.ies_data.ies_data.vertical_angles,
                 candela_values,
                 kind="linear",
                 fill_value="extrapolate",
             )
 
             # print(f"\nX0: {v_start}, X1: {v_end}, Y0: {h_start}, Y1: {h_end}")
-
             for x in range(x_start, x_end):
                 for y in range(y_start, y_end):
                     if light_height != 0:
@@ -103,7 +170,7 @@ class IES_Thumbnail_Generator:
                         pixel_value = 0
                     else:
                         pixel_value = self._compute_pixel_value(
-                            interpolation, polar.r, polar.theta, L_max, D=distance
+                            interpolation, polar, L_max, D=distance
                         )
                     image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
 
@@ -114,7 +181,7 @@ class IES_Thumbnail_Generator:
 
         else:
             # the distribution is not axially symmetric
-            end_h_angle = self.ies_parser.ies_data.horizontal_angles[-1]
+            end_h_angle = self.ies_data.ies_data.horizontal_angles[-1]
             if end_h_angle == 90:  # H ∈ [0, 90]
                 # the distribution is symmetric in each quadrant
                 ...
@@ -122,23 +189,23 @@ class IES_Thumbnail_Generator:
                 # the distribution is symmetric about a vertical plane:
                 # left plane angles are 180 - H
                 x_start, x_end = 0, self.size
-                candela_right_values = self.ies_parser.ies_data.candela_values[
+                candela_right_values = self.ies_data.ies_data.candela_values[
                     float(horizontal_angle)
                 ]
-                candela_left_values = self.ies_parser.ies_data.candela_values[
+                candela_left_values = self.ies_data.ies_data.candela_values[
                     180 - float(horizontal_angle)
                 ]
                 # print(candela_right_values)
                 # print(candela_left_values)
                 interpolation_right = interp1d(
-                    self.ies_parser.ies_data.vertical_angles,
+                    self.ies_data.ies_data.vertical_angles,
                     candela_right_values,
                     kind="linear",
                     fill_value="extrapolate",
                 )
                 max_right_value = max(candela_right_values)
                 interpolation_left = interp1d(
-                    self.ies_parser.ies_data.vertical_angles,
+                    self.ies_data.ies_data.vertical_angles,
                     candela_left_values,
                     kind="linear",
                     fill_value="extrapolate",
@@ -217,11 +284,13 @@ class IES_Thumbnail_Generator:
     def _compute_pixel_value(
         self,
         interpolation: typing.Callable[[float], float],
-        r: float,  # radius from the center in pixels
-        theta: float,  # vertical angle in degrees: 0° in bottom, 180° in top
+        polar: PolarCoordinates,  # radius from the center in pixels, vertical angle in degrees: 0° in bottom, 180° in top
         L_max: float,  # max lumen intensity in candelas
         D: float,  # Distance from the light source to the wall in meters
     ) -> int:  # color value  (grayscale)
+        r = polar.r
+        theta = polar.theta
+
         # * calculate decay value
         R = r * self.pixel_size  # translate radius from pixels to meters
         # * calculate luminance interpolated value, distance D against the wall
@@ -252,3 +321,63 @@ class IES_Thumbnail_Generator:
         # color = 255 * math.pow(color / 255, 1 / 2.2)
 
         return int(color)
+
+    def _candela_at_polar(self, polar):
+        r = polar.r
+        theta = polar.theta
+        # * calculate decay value
+        R = r * self.pixel_size  # translate radius from pixels to meters
+        # * calculate luminance interpolated value, distance D against the wall
+        if D != 0.0:
+            RD = np.sqrt(R * R + D * D)
+            decay_value = 1 / (RD * RD) if R != 0 else 1
+
+            t = np.sqrt((R * np.sin(np.radians(theta))) ** 2 + D**2)
+            beta = np.degrees(np.arcsin(t / RD))
+            if theta > 90:
+                beta = 180 - beta
+            # print(theta, beta)
+            L_dir = interpolation(beta)  # candela value for this ray (vertical angle)
+        else:
+            decay_value = 1 / (R * R) if R != 0 else 1
+            L_dir = interpolation(theta)
+
+    def _compute_pixel_value_2(
+        self,
+        polar: PolarCoordinates,  # radius from the center in pixels, vertical angle in degrees: 0° in bottom, 180° in top
+        D: float,  # Distance from the light source to the wall in meters
+    ) -> int:  # color value  (grayscale)
+        r = polar.r
+        theta = polar.theta
+
+        # * calculate decay value
+        R = r * self.pixel_size  # translate radius from pixels to meters
+        # * calculate luminance interpolated value, distance D against the wall
+        if D != 0.0:
+            RD = np.sqrt(R * R + D * D)
+            decay_value = 1 / (RD * RD) if R != 0 else 1
+
+            t = np.sqrt((R * np.sin(np.radians(theta))) ** 2 + D**2)
+            beta = np.degrees(np.arcsin(t / RD))
+            if theta > 90:
+                beta = 180 - beta
+            # print(theta, beta)
+            L_dir = interpolation(beta)  # candela value for this ray (vertical angle)
+        else:
+            decay_value = 1 / (R * R) if R != 0 else 1
+            L_dir = interpolation(theta)
+
+        # * calculate decaued luminance
+        L = L_dir * decay_value
+
+        # Brgihtness control
+        # ...
+
+        # * adjust simple linear tone maping
+        color = 255 * L / L_max
+
+        # Gamma correction
+        # color = 255 * math.pow(color / 255, 1 / 2.2)
+
+        return int(color)
+    """

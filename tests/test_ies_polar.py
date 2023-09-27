@@ -1,9 +1,9 @@
 import numpy as np
-from module import IES_Thumbnail_Generator
+from module import IESPolar
 
 
 def test_to_polar():
-    instance = IES_Thumbnail_Generator(ies_path=None, size=512)
+    dummy = IESPolar(size=512)
     # Define the expected results
     expected_results = {
         (0, 0): -135.0,
@@ -19,11 +19,8 @@ def test_to_polar():
 
     # Test the _to_polar method with different coordinates
     for coords, expected_theta in expected_results.items():
-        polar = instance._to_polar(*coords)
+        polar = dummy.cartesian2polar(*coords)
         assert np.isclose(
             polar.theta, expected_theta, atol=0.5
         ), f"Failed for coords {coords}: expected {expected_theta}, got {polar.theta}"
         print(f"Passed for coords {coords}")
-
-
-# You can then run this test function, or better yet, use a test runner like pytest.
