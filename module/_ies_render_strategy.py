@@ -99,7 +99,6 @@ class Render0(RenderStrategy):
         render_attrs = self.get_render_prepare_data(size)
         candela_values = self._ies_data.candela_values[0.0]
         L_max = max(candela_values)
-
         interp_theta_luminance = interp1d(
             self._ies_data.vertical_angles,
             candela_values,
@@ -191,13 +190,21 @@ class Render0_180(RenderStrategy):
         render_attrs = self.get_render_prepare_data(size)
 
         coords = IESPolar(size)
+        image = Image.new("RGB", (size, size))
 
         if not distance:
+            # D = 0
+            nearest_available_horizontal_angle = nearest_angle(
+                float(horizontal_angle), self._ies_data.horizontal_angles
+            )
+            opposite_avaialble_horizontal_angle = nearest_angle(
+                180 - float(horizontal_angle), self._ies_data.horizontal_angles
+            )
             candela_right_values = self._ies_data.candela_values[
-                float(horizontal_angle)
+                nearest_available_horizontal_angle
             ]
             candela_left_values = self._ies_data.candela_values[
-                180 - float(horizontal_angle)  # symmetry
+                opposite_avaialble_horizontal_angle
             ]
             interpolation_right = interp1d(
                 self._ies_data.vertical_angles,
@@ -213,60 +220,101 @@ class Render0_180(RenderStrategy):
             )
             L_max = max(candela_left_values + candela_right_values)
 
-        image = Image.new("RGB", (size, size))
+            for x in range(0, size):
+                for y in range(render_attrs.y_start, render_attrs.y_end):
+                    if self._ies_data.height != 0:
+                        polar = coords.cartesian2polar(
+                            x,
+                            y,
+                            render_attrs.pixel_size,
+                            top_border=render_attrs.light_top_border,
+                            bottom_border=render_attrs.light_bottom_border,
+                        )
+                    else:
+                        polar = coords.cartesian2polar(
+                            x, y, pixel_size=render_attrs.pixel_size
+                        )
 
-        for x in range(0, size):
-            for y in range(render_attrs.y_start, render_attrs.y_end):
-                if self._ies_data.height != 0:
-                    polar = coords.cartesian2polar(
-                        x,
-                        y,
-                        render_attrs.pixel_size,
-                        top_border=render_attrs.light_top_border,
-                        bottom_border=render_attrs.light_bottom_border,
-                    )
-                else:
-                    polar = coords.cartesian2polar(
-                        x, y, pixel_size=render_attrs.pixel_size
-                    )
+                    if polar.theta >= 0:
+                        interp_func = interpolation_right
+                    else:
+                        interp_func = interpolation_left
+                    decay_value = 1 / (polar.r * polar.r) if polar.r != 0 else 1
+                    L_dir = interp_func(np.abs(polar.theta))
+                    L = L_dir * decay_value
+                    pixel_value = int(255 * L / L_max)
+                    image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
 
-                if distance:
-                    alpha = np.arctan(
-                        distance / np.sin(np.radians(polar.theta))
-                    )  # horiontal angle
-                    nearest_horizontal_angle = nearest_angle(
-                        alpha, self._ies_data.horizontal_angles
-                    )
-                    candela_left_values = self._ies_data.candela_values[
-                        nearest_horizontal_angle
-                    ]
-                    candela_right_values = self._ies_data.candela_values[
-                        180.0 - nearest_horizontal_angle
-                    ]
-                    interpolation_right = interp1d(
-                        self._ies_data.vertical_angles,
-                        candela_right_values,
-                        kind="linear",
-                        fill_value="extrapolate",
-                    )
-                    interpolation_left = interp1d(
-                        self._ies_data.vertical_angles,
-                        candela_left_values,
-                        kind="linear",
-                        fill_value="extrapolate",
-                    )
-                    L_max = max(candela_left_values + candela_right_values)
-                # else:
-                if polar.theta >= 0:
-                    interp_func = interpolation_right
-                else:
-                    interp_func = interpolation_left
-                decay_value = 1 / (polar.r * polar.r) if polar.r != 0 else 1
-                L_dir = interp_func(np.abs(polar.theta))
-                L = L_dir * decay_value
-                pixel_value = int(255 * L / L_max)
+        else:
+            # a light is distanced by D meters from the wall
+            for x in range(0, size):
+                x_ = x - render_attrs.center
+                alpha = 90 - np.degrees(
+                    np.arctan((x_ * render_attrs.pixel_size) / distance)
+                )  # horizontal angle
+                # nearest_horizontal_angle = nearest_angle(
+                #     alpha, self._ies_data.horizontal_angles
+                # )
+                print(
+                    (x, x_),
+                    alpha,
+                    # nearest_horizontal_angle,
+                )
+                # candela_values = self._ies_data.candela_values[nearest_horizontal_angle]
+                # interpolation = interp1d(
+                #     self._ies_data.vertical_angles,
+                #     candela_values,
+                #     kind="linear",
+                #     fill_value="extrapolate",
+                # )
 
-                image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
+                # Transpose the candela values list for interpolation
+                candela_array = np.array(list(self._ies_data.candela_values.values())).T
+                print()
+                # Interpolate the candela values for the target angle
+                interpolated_candela_values = np.interp(
+                    alpha,
+                    self._ies_data.horizontal_angles,
+                    candela_array,
+                )
+
+                print(interpolated_candela_values)
+                interpolation = interp1d(
+                    self._ies_data.vertical_angles,
+                    interpolated_candela_values,
+                    kind="linear",
+                    fill_value="extrapolate",
+                )
+                L_max = max(interpolated_candela_values)
+
+                for y in range(render_attrs.y_start, render_attrs.y_end):
+                    if self._ies_data.height != 0:
+                        polar = coords.cartesian2polar(
+                            x,
+                            y,
+                            render_attrs.pixel_size,
+                            top_border=render_attrs.light_top_border,
+                            bottom_border=render_attrs.light_bottom_border,
+                        )
+                    else:
+                        polar = coords.cartesian2polar(
+                            x, y, pixel_size=render_attrs.pixel_size
+                        )
+
+                    RD = np.sqrt(polar.r * polar.r + distance * distance)
+                    decay_value = 1 / RD**2
+                    y_ = y - render_attrs.center
+                    beta = 90 - np.degrees(
+                        np.arctan((y_ * render_attrs.pixel_size) / RD)
+                    )
+                    # print("    ", (x, y), polar.theta, beta)
+                    L_dir = interpolation(
+                        beta
+                    )  # candela value for this ray (vertical angle)
+                    L = L_dir * decay_value
+                    pixel_value = int(255 * L / L_max)
+
+                    image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
 
         return image
 

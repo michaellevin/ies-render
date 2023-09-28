@@ -115,7 +115,7 @@ class IES_Viewer(QWidget):
         # Render Size ComboBox with Label
         settings_layout.addWidget(QLabel("Render Size:"))
         self.size_combo = QComboBox()
-        self.size_combo.addItems(["128", "256", "512", "1024"])
+        self.size_combo.addItems(["16", "32", "64", "128", "256", "512", "1024"])
         settings_layout.addWidget(self.size_combo)
 
         # Horizontal Angle DoubleSpinBox with Label
