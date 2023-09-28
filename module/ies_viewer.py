@@ -17,7 +17,7 @@ from qtpy.QtWidgets import (
     QGraphicsScene,
     QGraphicsPixmapItem,
 )
-from qtpy.QtCore import Qt, QDir, QRectF
+from qtpy.QtCore import Qt, QDir, QRectF, QSettings
 from qtpy.QtGui import QImage, QPixmap, QPainter
 
 try:
@@ -77,7 +77,7 @@ class ZoomableGraphicsView(QGraphicsView):
         super(ZoomableGraphicsView, self).mouseReleaseEvent(event)
 
 
-class IESViewer(QWidget):
+class IES_Viewer(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("IES Viewer")
@@ -154,6 +154,9 @@ class IESViewer(QWidget):
         main_layout.addLayout(settings_layout)
         self.setLayout(main_layout)
 
+        self.load_settings()
+        self.window().destroyed.connect(self.save_settings)
+
     def generate_image(self):
         # Get the selected IES file
         selected_index = self.tree_view.currentIndex()
@@ -195,9 +198,35 @@ class IESViewer(QWidget):
         )
         self.image_label.pixmap().save(out_path)
 
+    def load_settings(self):
+        settings = QSettings("lz", "IES_Viewer")
+
+        # Load settings and set the values of the UI elements
+        self.size_combo.setCurrentText(settings.value("size", "256"))
+        self.horizontal_angle_spinbox.setValue(
+            float(settings.value("horizontal_angle", "0"))
+        )
+        self.distance_spinbox.setValue(float(settings.value("distance", "0")))
+        self.blur_checkbox.setChecked(settings.value("blur", "false") == "true")
+
+    def save_settings(self):
+        settings = QSettings("lz", "IES_Viewer")
+
+        # Save the current values of the UI elements to settings
+        settings.setValue("size", self.size_combo.currentText())
+        settings.setValue(
+            "horizontal_angle", str(self.horizontal_angle_spinbox.value())
+        )
+        settings.setValue("distance", str(self.distance_spinbox.value()))
+        settings.setValue("blur", "true" if self.blur_checkbox.isChecked() else "false")
+
+    def closeEvent(self, event) -> None:
+        self.save_settings()
+        return super().closeEvent(event)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    viewer = IESViewer()
+    viewer = IES_Viewer()
     viewer.show()
     sys.exit(app.exec_())

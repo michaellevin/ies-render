@@ -26,6 +26,19 @@ RenderAttrs = namedtuple(
 )
 
 
+def nearest_angle(alpha, angle_list):
+    nearest = None
+    min_diff = float("inf")
+
+    for angle in angle_list:
+        diff = (angle - alpha + 180) % 360 - 180
+        if abs(diff) < abs(min_diff):
+            min_diff = diff
+            nearest = angle
+
+    return nearest
+
+
 class RenderStrategy(ABC):
     WALL_SIZE = 5  # meters
 
@@ -221,7 +234,7 @@ class Render0_180(RenderStrategy):
                     alpha = np.arctan(
                         distance / np.sin(np.radians(polar.theta))
                     )  # horiontal angle
-                    nearest_horizontal_angle = self.nearest_angle(
+                    nearest_horizontal_angle = nearest_angle(
                         alpha, self._ies_data.horizontal_angles
                     )
                     candela_left_values = self._ies_data.candela_values[
@@ -256,18 +269,6 @@ class Render0_180(RenderStrategy):
                 image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
 
         return image
-
-    def nearest_angle(alpha, angle_list):
-        nearest = None
-        min_diff = float("inf")
-
-        for angle in angle_list:
-            diff = (angle - alpha + 180) % 360 - 180
-            if abs(diff) < abs(min_diff):
-                min_diff = diff
-                nearest = angle
-
-        return nearest
 
 
 class Render0_360(RenderStrategy):
