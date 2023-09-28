@@ -178,6 +178,7 @@ class Render0_180(RenderStrategy):
         render_attrs = self.get_render_prepare_data(size)
 
         coords = IESPolar(size)
+
         if not distance:
             candela_right_values = self._ies_data.candela_values[
                 float(horizontal_angle)
@@ -217,19 +218,56 @@ class Render0_180(RenderStrategy):
                     )
 
                 if distance:
-                    ...
+                    alpha = np.arctan(
+                        distance / np.sin(np.radians(polar.theta))
+                    )  # horiontal angle
+                    nearest_horizontal_angle = self.nearest_angle(
+                        alpha, self._ies_data.horizontal_angles
+                    )
+                    candela_left_values = self._ies_data.candela_values[
+                        nearest_horizontal_angle
+                    ]
+                    candela_right_values = self._ies_data.candela_values[
+                        180.0 - nearest_horizontal_angle
+                    ]
+                    interpolation_right = interp1d(
+                        self._ies_data.vertical_angles,
+                        candela_right_values,
+                        kind="linear",
+                        fill_value="extrapolate",
+                    )
+                    interpolation_left = interp1d(
+                        self._ies_data.vertical_angles,
+                        candela_left_values,
+                        kind="linear",
+                        fill_value="extrapolate",
+                    )
+                    L_max = max(candela_left_values + candela_right_values)
+                # else:
+                if polar.theta >= 0:
+                    interp_func = interpolation_right
                 else:
-                    if polar.theta >= 0:
-                        interp_func = interpolation_right
-                    else:
-                        interp_func = interpolation_left
-                    decay_value = 1 / (polar.r * polar.r) if polar.r != 0 else 1
-                    L_dir = interp_func(np.abs(polar.theta))
-                    L = L_dir * decay_value
-                    pixel_value = int(255 * L / L_max)
+                    interp_func = interpolation_left
+                decay_value = 1 / (polar.r * polar.r) if polar.r != 0 else 1
+                L_dir = interp_func(np.abs(polar.theta))
+                L = L_dir * decay_value
+                pixel_value = int(255 * L / L_max)
 
                 image.putpixel((x, y), (pixel_value, pixel_value, pixel_value))
+
         return image
+
+    def nearest_angle(alpha, angle_list):
+        nearest = None
+        min_diff = float("inf")
+
+        for angle in angle_list:
+            diff = (angle - alpha + 180) % 360 - 180
+            if abs(diff) < abs(min_diff):
+                min_diff = diff
+                nearest = angle
+
+        return nearest
 
 
 class Render0_360(RenderStrategy):

@@ -85,13 +85,17 @@ class IES_Thumbnail_Generator:
         out_path: typing.Optional[str] = None,
     ):
         logging.info(f" Rendering '{self.ies_path}' with size {size}...")
+
+        # * Rendering
         image = self.render_strategy.render(
             size=size, horizontal_angle=horizontal_angle, distance=distance
         )
 
+        # * Post-effects: blur
         if blur_radius:
             image = image.filter(ImageFilter.GaussianBlur(blur_radius))
 
+        # * Save
         if save:
             if not out_path:
                 out_path = self.ies_path.replace(
@@ -99,6 +103,8 @@ class IES_Thumbnail_Generator:
                 )
             image.save(out_path)
             logging.info(f"Saved image to {out_path}")
+
+        return image
 
     """
     @timing_decorator
