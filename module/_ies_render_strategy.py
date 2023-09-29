@@ -247,46 +247,71 @@ class Render0_180(RenderStrategy):
 
         else:
             # a light is distanced by D meters from the wall
+
+            candela_lists = list(self._ies_data.candela_values.values())
+            candela_array = np.array(candela_lists).T
+
+            # nearest_available_horizontal_angle = nearest_angle(
+            #     float(horizontal_angle), self._ies_data.horizontal_angles
+            # )
+            # opposite_avaialble_horizontal_angle = nearest_angle(
+            #     180 - float(horizontal_angle), self._ies_data.horizontal_angles
+            # )
+            # candela_right_values = self._ies_data.candela_values[
+            #     nearest_available_horizontal_angle
+            # ]
+            # candela_left_values = self._ies_data.candela_values[
+            #     opposite_avaialble_horizontal_angle
+            # ]
+            # interpolation_right = interp1d(
+            #     self._ies_data.vertical_angles,
+            #     candela_right_values,
+            #     kind="linear",
+            #     fill_value="extrapolate",
+            # )
+            # interpolation_left = interp1d(
+            #     self._ies_data.vertical_angles,
+            #     candela_left_values,
+            #     kind="linear",
+            #     fill_value="extrapolate",
+            # )
+            # L_max = max(candela_left_values + candela_right_values)
+            # print(nearest_available_horizontal_angle, candela_right_values)
+            # print(opposite_avaialble_horizontal_angle, candela_left_values)
+
             for x in range(0, size):
                 x_ = x - render_attrs.center
                 alpha = 90 - np.degrees(
                     np.arctan((x_ * render_attrs.pixel_size) / distance)
                 )  # horizontal angle
-                # nearest_horizontal_angle = nearest_angle(
-                #     alpha, self._ies_data.horizontal_angles
-                # )
-                print(
-                    (x, x_),
-                    alpha,
-                    # nearest_horizontal_angle,
-                )
-                # candela_values = self._ies_data.candela_values[nearest_horizontal_angle]
-                # interpolation = interp1d(
-                #     self._ies_data.vertical_angles,
-                #     candela_values,
-                #     kind="linear",
-                #     fill_value="extrapolate",
-                # )
 
-                # Transpose the candela values list for interpolation
-                candela_array = np.array(list(self._ies_data.candela_values.values())).T
-                print()
                 # Interpolate the candela values for the target angle
-                interpolated_candela_values = np.interp(
-                    alpha,
-                    self._ies_data.horizontal_angles,
-                    candela_array,
-                )
+                if alpha in self._ies_data.horizontal_angles:
+                    candela_values = self._ies_data.candela_values[alpha]
+                else:
+                    candela_values = np.array(
+                        [
+                            np.interp(alpha, self._ies_data.horizontal_angles, row)
+                            for row in candela_array
+                        ]
+                    )
 
-                print(interpolated_candela_values)
+                # print(interpolated_candela_values)
                 interpolation = interp1d(
                     self._ies_data.vertical_angles,
-                    interpolated_candela_values,
+                    candela_values,
                     kind="linear",
                     fill_value="extrapolate",
                 )
-                L_max = max(interpolated_candela_values)
-
+                L_max = max(candela_values)
+                # print(
+                #     (x, x_),
+                #     (x_ * render_attrs.pixel_size) / distance,
+                #     np.degrees(np.arctan((x_ * render_attrs.pixel_size) / distance)),
+                #     f"horizonthal angle: {alpha}",
+                #     f"L max: {L_max}",
+                #     f"L: {candela_values[0]}, {candela_values[1]}, {candela_values[2]} .. {candela_values[-1]}",
+                # )
                 for y in range(render_attrs.y_start, render_attrs.y_end):
                     if self._ies_data.height != 0:
                         polar = coords.cartesian2polar(
@@ -302,15 +327,21 @@ class Render0_180(RenderStrategy):
                         )
 
                     RD = np.sqrt(polar.r * polar.r + distance * distance)
-                    decay_value = 1 / RD**2
                     y_ = y - render_attrs.center
-                    beta = 90 - np.degrees(
-                        np.arctan((y_ * render_attrs.pixel_size) / RD)
+                    beta = np.degrees(np.arccos((y_ * render_attrs.pixel_size) / RD))
+                    print(
+                        "    ",
+                        (x, y),
+                        beta,
                     )
-                    # print("    ", (x, y), polar.theta, beta)
+                    # if polar.theta >= 0:
+                    #     interpolation = interpolation_right
+                    # else:
+                    #     interpolation = interpolation_left
                     L_dir = interpolation(
                         beta
                     )  # candela value for this ray (vertical angle)
+                    decay_value = 1 / RD**2
                     L = L_dir * decay_value
                     pixel_value = int(255 * L / L_max)
 

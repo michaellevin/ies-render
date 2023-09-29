@@ -14,17 +14,17 @@ class BrokenIESFileError(Exception):
 IESData = namedtuple(
     "IESData",
     [
-        "vertical_angles",
-        "horizontal_angles",
-        "candela_values",
-        "max_value",
-        "num_lamps",
-        "lumens_per_lamp",
-        "multiplier",
-        "width",
-        "length",
-        "height",
-        "shape",
+        "vertical_angles",  # list of vertical angles
+        "horizontal_angles",  # list of horizontal angles
+        "candela_values",  # {horizontal_angle: [candela_values]}
+        "max_value",  # max value of candela_values (float)
+        "num_lamps",  # number of lamps (int)
+        "lumens_per_lamp",  # lumens per lamp (float)
+        "multiplier",  # multiplier (float)
+        "width",  # width (float)
+        "length",  # length (float)
+        "height",  # height (float)
+        "shape",  # shape (str)
     ],
 )
 
