@@ -63,7 +63,8 @@ class IES_Thumbnail_Generator:
         horizontal_angle_last = int(ies_data.horizontal_angles[-1])
         if horizontal_angle_last == 0:
             # the luminaire is assumed to be laterally symmetric in all planes
-            return Render0(ies_data)
+            # return Render0(ies_data)
+            return Render0_180(ies_data)
         elif horizontal_angle_last == 90:
             # the luminaire is assumed to be symmetric in each quadrant.
             return Render0_90(ies_data)
