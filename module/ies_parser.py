@@ -51,6 +51,7 @@ class IES_Parser:
                     break
 
             # * Get sizes and other data
+            # TODO: check if all data is present (star.ies - many lines!)
             light_data = f.readline().split()
             num_lamps = int(light_data[0])
             lumens_per_lamp = float(light_data[1])
