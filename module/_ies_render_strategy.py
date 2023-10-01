@@ -1,3 +1,15 @@
+# -*- coding: utf-8 -*-
+"""IES render strategy module.
+
+This module contains the RenderStrategy abstract class and its subclasses.
+For understanfing how the render works, please refer to the following article:
+http://docs.autodesk.com/ACD/2011/ENU/filesAUG/WS73099cc142f48755f058a10f71c104f3-3b1a.htm
+OR docs/IES_description.pdf.
+
+You can also look through docs/ies_math_asset.hipnc (SideFX Houdini) file, 
+where a kind of IES render setup is implemented.
+"""
+
 from abc import ABC, abstractmethod
 import typing
 from collections import namedtuple
@@ -6,12 +18,9 @@ import numpy as np
 from PIL import Image
 
 try:
-    # from . import ies_parser
-    from .utils import timing_decorator
-    from .ies_polar import IESPolar, PolarCoordinates
+    from .ies_parser import IESData
 except ImportError:
-    from utils import timing_decorator
-    from ies_polar import IESPolar, PolarCoordinates
+    from ies_parser import IESData
 
 RenderAttrs = namedtuple(
     "RenderData",
@@ -33,20 +42,20 @@ RenderAttrs = namedtuple(
 class RenderStrategy(ABC):
     WALL_SIZE = 5  # meters
 
-    def __init__(self, ies_data):
+    def __init__(self, ies_data: IESData):
         self._ies_data = ies_data
 
-    def render(self, size: int, horizontal_angle: float = None, distance: float = None):
+    def render(
+        self, size: int, horizontal_angle: float = None, distance: float = None
+    ) -> Image:
         """
-        Abstract render method to be implemented by subclasses.
+        Render method.
 
         :param size: The size of the rendered image.
         :param horizontal_angle: The horizontal angle.
         :param distance: The distance from the wall in meters.
-        :param blur_radius:  The blur radius for the render in pixels.
         """
-        # the distribution is symmetric about a vertical plane:
-        # left plane angles are 180 - H
+
         render_attrs = self.prepare_render_data(size)
 
         image = Image.new("RGB", (size, size))
@@ -59,7 +68,8 @@ class RenderStrategy(ABC):
         horizontal_angles = self.get_horizontal_angles(
             size, horizontal_angle, distance, render_attrs
         )
-        print(f"horizontal_angles: {horizontal_angles}")
+        # print(f"horizontal_angles: {horizontal_angles}")
+
         # Initialize an array to store pixel values
         candela_values_all = []
         L_values = np.zeros((size, render_attrs.y_end - render_attrs.y_start))
@@ -103,10 +113,7 @@ class RenderStrategy(ABC):
 
             # Calculate the squared distance (RD) and identify where it's close to zero
             RD = np.sum(ray_L_XY**2, axis=1)
-            RD = np.maximum(
-                RD, 0.00001
-            )  # Replace 0.01 with a suitable small value for your application
-            # Continue with the previous calculations
+            RD = np.maximum(RD, 0.00001)  # Replace 0 value for not deleting by zero
             nb_y = ray_L_XY / np.sqrt(RD)[:, np.newaxis]
             dot_products_y = np.clip(np.dot(nb_y, render_attrs.light_Y_axis), -1.0, 1.0)
             vertical_angles = np.degrees(np.arccos(dot_products_y))
@@ -123,6 +130,7 @@ class RenderStrategy(ABC):
         )
         for x, alpha in enumerate(horizontal_angles):
             # Normalize L values and convert to pixel values
+            # TODO: here we can adjust brightness if needed. L_values are in huge range and we clamp then to 0-1
             pixel_values[x, :] = (255 * np.clip(L_values[x, :] / L_max, 0, 1)).astype(
                 np.uint8
             )
@@ -145,7 +153,7 @@ class RenderStrategy(ABC):
 
         return image
 
-    def prepare_render_data(self, size: int):
+    def prepare_render_data(self, size: int) -> RenderAttrs:
         center = size // 2
         pixel_size = self.WALL_SIZE / size
         center_in_meters = center * pixel_size
@@ -190,18 +198,41 @@ class RenderStrategy(ABC):
         )
 
     @abstractmethod
-    def get_horizontal_angles(self, size, horizontal_angle, distance, render_attrs):
+    def get_horizontal_angles(
+        self, size, horizontal_angle, distance, render_attrs
+    ) -> np.ndarray:
+        """Getting horizontal angles
+
+        :param size (int): The size of the rendered image.
+        :param horizontal_angle (float): The horizontal angle.
+        :param distance (float): The distance from the wall in meters.
+        :param render_attrs (RenderAttrs): namedtuple of pre-calculated render attributes
+
+        To be implemented by subclasses.
+        """
         pass
 
 
 # Implement the RenderStrategy for each scenario
 class Render0(RenderStrategy):
-    def get_horizontal_angles(self, size, *args, **kwargs):
+    """
+    The luminaire is assumed to be laterally
+    symmetric in all planes.
+    """
+
+    def get_horizontal_angles(self, size, *args, **kwargs) -> np.ndarray:
         return np.zeros(size)
 
 
 class Render0_90(RenderStrategy):
-    def get_horizontal_angles(self, size, horizontal_angle, distance, render_attrs):
+    """
+    the luminaire is assumed to be symmetric in
+    each quadrant
+    """
+
+    def get_horizontal_angles(
+        self, size, horizontal_angle, distance, render_attrs
+    ) -> np.ndarray:
         if distance == 0.0:
             # Directly assign alphas based on x position relative to light source
             horizontal_angles = np.where(
@@ -236,7 +267,14 @@ class Render0_90(RenderStrategy):
 
 
 class Render0_180(RenderStrategy):
-    def get_horizontal_angles(self, size, horizontal_angle, distance, render_attrs):
+    """
+    The distribution is symmetric about a vertical plane:
+    left plane angles are 180 - H
+    """
+
+    def get_horizontal_angles(
+        self, size, horizontal_angle, distance, render_attrs
+    ) -> np.ndarray:
         if distance == 0.0:
             # Directly assign alphas based on x position relative to light source
             horizontal_angles = np.where(
@@ -271,7 +309,14 @@ class Render0_180(RenderStrategy):
 
 
 class Render0_360(RenderStrategy):
-    def get_horizontal_angles(self, size, horizontal_angle, distance, render_attrs):
+    """
+    the luminaire is assumed to
+    exhibit no lateral symmetry.
+    """
+
+    def get_horizontal_angles(
+        self, size, horizontal_angle, distance, render_attrs
+    ) -> np.ndarray:
         if distance == 0.0:
             # Directly assign alphas based on x position relative to light source
             horizontal_angles = np.where(
