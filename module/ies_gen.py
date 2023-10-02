@@ -52,7 +52,7 @@ class IES_Thumbnail_Generator:
         self._ies_path = ies_path
         try:
             ies_parser = IES_Parser(ies_path)
-            logging.info(ies_parser)
+            # logging.info(ies_parser)
             self._ies_data = ies_parser.ies_data
             return self._ies_data
         except (FileNotFoundError, BrokenIESFileError) as err:
