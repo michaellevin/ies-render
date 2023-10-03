@@ -3,7 +3,7 @@ from module import IES_Thumbnail_Generator
 if __name__ == "__main__":
     ies_paths = [
         "examples/vertical_angles.ies",
-        "examles/horiz_angles.ies",
+        "examples/horiz_angles.ies",
         "examples/ies-lights-pack/area-light.ies",
     ]
     tb = IES_Thumbnail_Generator(ies_paths[2])
