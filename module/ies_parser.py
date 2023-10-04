@@ -1,6 +1,7 @@
 import os
 from collections import deque, namedtuple
 import math
+import platform
 
 
 class BrokenIESFileError(Exception):
@@ -76,7 +77,11 @@ class IES_Parser:
             cleaned_line = line.replace(",", " ")
             return deque(map(float, cleaned_line.split()))
 
-        with open(self._ies_path, "r") as f:
+        with open(
+            self._ies_path,
+            "r",
+            encoding="Windows-1252" if platform.system() != "Windows" else None,
+        ) as f:
             for line in f:
                 if line.strip() == "TILT=NONE":
                     break
