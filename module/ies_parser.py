@@ -11,6 +11,35 @@ class BrokenIESFileError(Exception):
         super().__init__(self.message)
 
 
+def get_next_numbers(f, count):
+    """
+    Retrieve a specified amount of numeric values from a file stream.
+
+    This function reads lines from the provided file stream, splits them
+    into whitespace-separated strings, and accumulates the numeric values.
+    It continues to read lines until the specified amount of numbers is
+    collected or the file ends. If the file ends before enough numbers
+    are gathered, it raises a BrokenIESFileError.
+
+    Args:
+        f (file): A file stream object opened in text mode.
+        count (int): The number of numeric values to retrieve from the file stream.
+
+    Returns:
+        list[str]: A list containing `count` string representations of the numbers.
+
+    Raises:
+        BrokenIESFileError: If the end of file is reached before `count` numbers are retrieved.
+    """
+    numbers = []
+    while len(numbers) < count:
+        line = next(f, None)
+        if line is None:
+            raise BrokenIESFileError("Unexpected end of file while reading numbers")
+        numbers.extend(line.split())
+    return numbers[:count]
+
+
 IESData = namedtuple(
     "IESData",
     [
@@ -30,8 +59,9 @@ IESData = namedtuple(
 
 
 class IES_Parser:
-    """_summary_
-    Eager parsing IES file and return IESData namedtuple
+    """
+    Eager parsing IES file
+    Returns IESData namedtuple
     """
 
     def __init__(self, ies_path: str):
@@ -50,9 +80,8 @@ class IES_Parser:
                 if line.strip() == "TILT=NONE":
                     break
 
-            # * Get sizes and other data
-            # TODO: check if all data is present (star.ies - many lines!)
-            light_data = f.readline().split()
+            # * Get sizes and other data (13 numbers)
+            light_data = get_next_numbers(f, 13)  # f.readline().split()
             num_lamps = int(light_data[0])
             lumens_per_lamp = float(light_data[1])
             multiplier = float(light_data[2])
@@ -63,7 +92,7 @@ class IES_Parser:
             width = float(light_data[7]) * k
             length = float(light_data[8]) * k
             height = float(light_data[9]) * k
-            # TODO
+            # TODO (all types of shapes)
             if all(i == 0 for i in [width, length, height]):
                 shape = "point"
             elif height == 0 and width < 0 and width == length:
@@ -82,9 +111,6 @@ class IES_Parser:
                 shape = "rectangular"
             else:
                 shape = "rectangular with luminous sides"
-
-            # Skip the next (only one) line
-            next(f)
 
             # * Read vertical angles
             vertical_angles, horizontal_angles, candela_values = (
@@ -116,10 +142,10 @@ class IES_Parser:
 
             # * Read candela values
             while True:
-                next_line = f.readline()
-                if not next_line:
-                    break  # End of file
-                candela_values.extend(_parse_line(next_line))
+                candela_values.extend(_parse_line(f.readline()))
+                if len(candela_values) == num_vertical_angles * num_horizontal_angles:
+                    break
+
             candela_values = list(candela_values)
             max_value = max(candela_values)
 
@@ -175,11 +201,6 @@ class IES_Parser:
             )
         else:
             hor_str = f"{self._ies_data.horizontal_angles[0]}, {self._ies_data.horizontal_angles[1]}, ... {self._ies_data.horizontal_angles[-1]} [{len(self.ies_data.horizontal_angles)} values]\n"
-            # hor_str = (
-            #     str(self.ies_data.horizontal_angles)
-            #     + " "
-            #     + str(len(self.ies_data.horizontal_angles))
-            # )
             message += f"{bold}{underline}{green}Horizontal:{reset}\n\t" + hor_str
 
             message += f"{bold}{underline}{green}Candela:{reset}\n"
@@ -200,6 +221,7 @@ class IES_Parser:
 
 
 if __name__ == "__main__":
-    ies_path = "examples/vertical_angles.ies"
+    ies_path = "examples/ies-lights-pack/defined-diffuse-spot.ies"
+    # ies_path = "examples/horiz_angles.ies"
     ies = IES_Parser(ies_path)
     print(ies)
