@@ -1,3 +1,5 @@
+qtpy
 PySide6
-QtPy
 Pillow
+numpy
+scipy

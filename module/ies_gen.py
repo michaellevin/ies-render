@@ -48,7 +48,7 @@ class IES_Thumbnail_Generator:
     def ies_data(self):
         return self._ies_data
 
-    def _populate(self, ies_path: str) -> IESData | None:
+    def _populate(self, ies_path: str) -> typing.Optional[IESData]:
         self._ies_path = ies_path
         try:
             ies_parser = IES_Parser(ies_path)
