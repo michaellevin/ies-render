@@ -216,6 +216,8 @@ class RenderStrategy(ABC):
 # Implement the RenderStrategy for each scenario
 class Render0(RenderStrategy):
     """
+    The only horizontal angle is 0°
+
     The luminaire is assumed to be laterally
     symmetric in all planes.
     """
@@ -226,6 +228,8 @@ class Render0(RenderStrategy):
 
 class Render0_90(RenderStrategy):
     """
+    Last horizontal angle is 90°
+
     the luminaire is assumed to be symmetric in
     each quadrant
     """
@@ -268,6 +272,8 @@ class Render0_90(RenderStrategy):
 
 class Render0_180(RenderStrategy):
     """
+    Last horizontal angle is 180°
+
     The distribution is symmetric about a vertical plane:
     left plane angles are 180 - H
     """
@@ -310,6 +316,8 @@ class Render0_180(RenderStrategy):
 
 class Render0_360(RenderStrategy):
     """
+    Last horizontal angle is inbetween (180°-360°)
+
     the luminaire is assumed to
     exhibit no lateral symmetry.
     """
