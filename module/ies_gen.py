@@ -103,6 +103,6 @@ class IES_Thumbnail_Generator:
                     ".ies", f"_s{size}_d{distance}_h{horizontal_angle}.png"
                 )
             image.save(out_path)
-            logging.info(f"Saved image to {out_path}")
+            logging.info(f" Saved image to {out_path}")
 
         return image
