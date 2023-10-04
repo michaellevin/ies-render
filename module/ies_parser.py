@@ -73,7 +73,8 @@ class IES_Parser:
 
     def _parse(self) -> IESData:
         def _parse_line(line: str) -> deque:
-            return deque(map(float, line.split()))
+            cleaned_line = line.replace(",", " ")
+            return deque(map(float, cleaned_line.split()))
 
         with open(self._ies_path, "r") as f:
             for line in f:
@@ -222,6 +223,7 @@ class IES_Parser:
 
 if __name__ == "__main__":
     ies_path = "examples/ies-lights-pack/defined-diffuse-spot.ies"
+    ies_path = "examples/ies-lights-pack/star-focused.ies"
     # ies_path = "examples/horiz_angles.ies"
     ies = IES_Parser(ies_path)
     print(ies)
