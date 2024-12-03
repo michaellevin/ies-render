@@ -85,5 +85,4 @@ class IESPolar:
             r *= pixel_size
         return PolarCoordinates(r, theta)
 
-    def polar2cartesian(self, polar: PolarCoordinates):
-        ...
+    def polar2cartesian(self, polar: PolarCoordinates): ...
