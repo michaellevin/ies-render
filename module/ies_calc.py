@@ -7,7 +7,7 @@ import math
 from pprint import pprint
 
 
-def bilinear_interpolation(r, theta, phi, IESData):
+def bilinear_interpolation(r, theta, phi, height, IESData):
     """
     Calculates the luminance at a point (r, theta, phi) using bilinear
     interpolation of IES data, with edge case handling.
@@ -37,7 +37,7 @@ def bilinear_interpolation(r, theta, phi, IESData):
     else:
         h1 = max(a for a in horizontal_angles if a <= horizontal_angle)
         h2 = min(a for a in horizontal_angles if a >= horizontal_angle)
-
+    # print(h1, h2)
     # Edge case handling for vertical angle
     if vertical_angle <= vertical_angles[0]:
         v1 = v2 = vertical_angles[0]
@@ -46,12 +46,12 @@ def bilinear_interpolation(r, theta, phi, IESData):
     else:
         v1 = max(a for a in vertical_angles if a <= vertical_angle)
         v2 = min(a for a in vertical_angles if a >= vertical_angle)
-
+    # print(v1, v2)
     Q11 = candela_values[h1][vertical_angles.index(v1)]
     Q12 = candela_values[h1][vertical_angles.index(v2)]
     Q21 = candela_values[h2][vertical_angles.index(v1)]
     Q22 = candela_values[h2][vertical_angles.index(v2)]
-
+    # print(Q11, Q12, Q21, Q22)
     # Avoid division by zero
     if h2 == h1:
         wh1 = wh2 = 0.5  # Or simply use Q11 (or Q21)
@@ -69,13 +69,20 @@ def bilinear_interpolation(r, theta, phi, IESData):
     R2 = wh1 * Q12 + wh2 * Q22
 
     P = wv1 * R1 + wv2 * R2
-
+    # print(P)
+    # r -= 0.1156335552861286
+    hyp = height * math.cos(math.radians(phi))
+    # print(hyp)
+    # hyp = 0.0723
+    r -= hyp
     luminance = P / (r**2)
 
     return luminance
 
 
-def calculate_luminance(ies_data: IESData, point: tuple[float, float, float]):
+def calculate_luminance(
+    ies_data: IESData, height: float, point: tuple[float, float, float]
+):
     """
     Calculate luminance (candela value) at a 3D point.
 
@@ -89,12 +96,15 @@ def calculate_luminance(ies_data: IESData, point: tuple[float, float, float]):
     # Convert point to polar coordinates
     polar = point3d2polar(point)
     print(polar)
-    luminance = bilinear_interpolation(polar.r, polar.theta, polar.phi, ies_data)
+    luminance = bilinear_interpolation(
+        polar.r, polar.theta, polar.phi, height, ies_data
+    )
     return luminance
 
 
 def ies_calculate_luminance_at_point(
     ies_path: str,
+    height: float,
     point: tuple[float, float, float],
 ):
     """
@@ -109,7 +119,7 @@ def ies_calculate_luminance_at_point(
     """
     ies_parser = IES_Parser(ies_path)
     ies_data = ies_parser.ies_data
-    return calculate_luminance(ies_data, point)
+    return calculate_luminance(ies_data, height, point)
 
 
 # def average_luminance_on_box(ies_path, point1, point2, height, num_points=100):
@@ -152,7 +162,7 @@ def ies_calculate_luminance_at_point(
 #     return average_luminance
 
 
-def average_luminance_on_box(ies_path, point1, point2, height, step=2):
+def average_luminance_on_box(ies_path, point1, point2, height, light_z_offset, step=1):
     """
     Calculates the average luminance on a horizontal box surface under an IES light.
     The box is defined by two diagonally opposite 3D points.
@@ -189,7 +199,11 @@ def average_luminance_on_box(ies_path, point1, point2, height, step=2):
             if x1 <= x <= x2 and y1 <= y <= y2:  # Check if point is inside the box
                 polar_coords = point3d2polar((x, y, height))
                 luminance = bilinear_interpolation(
-                    polar_coords.r, polar_coords.theta, polar_coords.phi, ies_data
+                    polar_coords.r,
+                    polar_coords.theta,
+                    polar_coords.phi,
+                    light_z_offset,
+                    ies_data,
                 )
                 total_luminance += luminance  # math.ceil(luminance)
                 print(num_points, x, y, luminance)
