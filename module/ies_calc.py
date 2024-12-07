@@ -5,9 +5,10 @@ from .ies_parser import IES_Parser, IESData
 from .ies_polar_3d import point3d2polar
 import math
 from pprint import pprint
+import matplotlib.pyplot as plt
 
 
-def bilinear_interpolation(r, theta, phi, height, IESData):
+def bilinear_interpolation(r, theta, phi, IESData):
     """
     Calculates the luminance at a point (r, theta, phi) using bilinear
     interpolation of IES data, with edge case handling.
@@ -37,7 +38,6 @@ def bilinear_interpolation(r, theta, phi, height, IESData):
     else:
         h1 = max(a for a in horizontal_angles if a <= horizontal_angle)
         h2 = min(a for a in horizontal_angles if a >= horizontal_angle)
-    # print(h1, h2)
     # Edge case handling for vertical angle
     if vertical_angle <= vertical_angles[0]:
         v1 = v2 = vertical_angles[0]
@@ -46,12 +46,11 @@ def bilinear_interpolation(r, theta, phi, height, IESData):
     else:
         v1 = max(a for a in vertical_angles if a <= vertical_angle)
         v2 = min(a for a in vertical_angles if a >= vertical_angle)
-    # print(v1, v2)
     Q11 = candela_values[h1][vertical_angles.index(v1)]
     Q12 = candela_values[h1][vertical_angles.index(v2)]
     Q21 = candela_values[h2][vertical_angles.index(v1)]
     Q22 = candela_values[h2][vertical_angles.index(v2)]
-    # print(Q11, Q12, Q21, Q22)
+
     # Avoid division by zero
     if h2 == h1:
         wh1 = wh2 = 0.5  # Or simply use Q11 (or Q21)
@@ -70,18 +69,20 @@ def bilinear_interpolation(r, theta, phi, height, IESData):
 
     P = wv1 * R1 + wv2 * R2
     # print(P)
-    # r -= 0.1156335552861286
-    hyp = height * math.cos(math.radians(phi))
-    # print(hyp)
-    # hyp = 0.0723
-    r -= hyp
-    luminance = P / (r**2)
 
+    luminance = math.cos(math.radians(phi)) * P / (r**2)
+    # print(f"Inputs: r={r}, theta={theta}, phi={phi}")
+    # print(f"Horizontal angles: {horizontal_angles}")
+    # print(f"Vertical angles: {vertical_angles}")
+    # print(f"Interpolation weights: wh1={wh1}, wh2={wh2}, wv1={wv1}, wv2={wv2}")
+    # print(f"Candela values: Q11={Q11}, Q12={Q12}, Q21={Q21}, Q22={Q22}")
     return luminance
 
 
 def calculate_luminance(
-    ies_data: IESData, height: float, point: tuple[float, float, float]
+    ies_data: IESData,
+    point: tuple[float, float, float],
+    h_offset: float,
 ):
     """
     Calculate luminance (candela value) at a 3D point.
@@ -94,10 +95,15 @@ def calculate_luminance(
         float: The luminance (candela value) at the given point.
     """
     # Convert point to polar coordinates
-    polar = point3d2polar(point)
+    x, y, z = point
+    z -= h_offset
+    polar = point3d2polar((x, y, z))
     print(polar)
     luminance = bilinear_interpolation(
-        polar.r, polar.theta, polar.phi, height, ies_data
+        polar.r,
+        polar.theta,
+        polar.phi,
+        ies_data,
     )
     return luminance
 
@@ -122,47 +128,7 @@ def ies_calculate_luminance_at_point(
     return calculate_luminance(ies_data, height, point)
 
 
-# def average_luminance_on_box(ies_path, point1, point2, height, num_points=100):
-#     """
-#     Calculates the average luminance on a horizontal box surface under an IES light.
-#     The box is defined by two diagonally opposite 3D points.
-
-#     Args:
-#         IESData: Named tuple containing IES data.
-#         point1: First 3D point (x1, y1, z1) defining a corner of the box.
-#         point2: Second 3D point (x2, y2, z2) defining the opposite corner of the box.
-#         height: Height of the box surface from the light source (this will
-#                 override the z-coordinates of point1 and point2).
-#         num_points: Number of points to sample for the calculation.
-
-#     Returns:
-#         The average luminance on the box surface in cd/m².
-#     """
-#     ies_parser = IES_Parser(ies_path)
-#     ies_data = ies_parser.ies_data
-
-#     x1, y1 = point1  # Ignore z1 from point1
-#     x2, y2 = point2  # Ignore z2 from point2
-
-#     x_coords = np.linspace(x1, x2, num_points)
-#     y_coords = np.linspace(y1, y2, num_points)
-
-#     total_luminance = 0
-
-#     for x in x_coords:
-#         for y in y_coords:
-#             print(x, y)
-#             polar_coords = point3d2polar((x, y, height))
-#             luminance = bilinear_interpolation(
-#                 polar_coords.r, polar_coords.theta, polar_coords.phi, ies_data
-#             )
-#             total_luminance += luminance
-
-#     average_luminance = total_luminance / (num_points**2)
-#     return average_luminance
-
-
-def average_luminance_on_box(ies_path, point1, point2, height, light_z_offset, step=1):
+def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, step=1):
     """
     Calculates the average luminance on a horizontal box surface under an IES light.
     The box is defined by two diagonally opposite 3D points.
@@ -191,23 +157,53 @@ def average_luminance_on_box(ies_path, point1, point2, height, light_z_offset, s
     y_coords = np.arange(0, y2 + step / 2, step)
     y_coords = np.concatenate([-np.flip(y_coords[1:]), y_coords])
 
+    points_x = []
+    points_y = []
+    luminance_values = []
+
     total_luminance = 0
     num_points = 0
 
     for x in x_coords:
         for y in y_coords:
             if x1 <= x <= x2 and y1 <= y <= y2:  # Check if point is inside the box
-                polar_coords = point3d2polar((x, y, height))
-                luminance = bilinear_interpolation(
-                    polar_coords.r,
-                    polar_coords.theta,
-                    polar_coords.phi,
-                    light_z_offset,
-                    ies_data,
-                )
-                total_luminance += luminance  # math.ceil(luminance)
-                print(num_points, x, y, luminance)
+                point = (x, y, mh)
+                luminance = calculate_luminance(ies_data, point, h_offset)
+                print(f"Point: {point[0], point[1]}, Luminance: {luminance}")
+                total_luminance += luminance
+                points_x.append(x)
+                points_y.append(y)
+                luminance_values.append(luminance)
                 num_points += 1
 
     average_luminance = total_luminance / num_points if num_points > 0 else 0
+    print(f"avg_luminance: {average_luminance}")
+
+    # Plot luminance distribution
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(points_x, points_y, c=luminance_values, cmap="viridis", s=50)
+    plt.colorbar(scatter, label="Luminance (cd/m²)")
+    # plt.title("Luminance Distribution on Box Surface")
+    plt.xlabel("X Coordinate (m)")
+    plt.ylabel("Y Coordinate (m)")
+    plt.grid(True)
+
+    # Add labels to each point
+    for x, y, lum in zip(points_x, points_y, luminance_values):
+        plt.text(x, y, f"{lum:.4f}", fontsize=8, ha="center", va="bottom")
+
+    # Add average luminance to the plot
+    plt.text(
+        0.5,
+        1.05,
+        f"Average Luminance: {average_luminance:.4f} cd/m²",
+        fontsize=12,
+        ha="center",
+        va="center",
+        transform=plt.gca().transAxes,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
+    )
+
+    plt.show()
+
     return average_luminance
