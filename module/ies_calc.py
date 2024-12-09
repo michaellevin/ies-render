@@ -83,6 +83,7 @@ def calculate_luminance(
     ies_data: IESData,
     point: tuple[float, float, float],
     h_offset: float,
+    orient: float = 0.0,
 ):
     """
     Calculate luminance (candela value) at a 3D point.
@@ -97,7 +98,7 @@ def calculate_luminance(
     # Convert point to polar coordinates
     x, y, z = point
     z -= h_offset
-    polar = point3d2polar((x, y, z))
+    polar = point3d2polar((x, y, z), orient)
     print(polar)
     luminance = bilinear_interpolation(
         polar.r,
@@ -111,6 +112,7 @@ def calculate_luminance(
 def ies_calculate_luminance_at_point(
     ies_path: str,
     height: float,
+    orient: float,
     point: tuple[float, float, float],
 ):
     """
@@ -125,10 +127,12 @@ def ies_calculate_luminance_at_point(
     """
     ies_parser = IES_Parser(ies_path)
     ies_data = ies_parser.ies_data
-    return calculate_luminance(ies_data, height, point)
+    return calculate_luminance(
+        ies_data=ies_data, point=point, h_offset=height, orient=orient
+    )
 
 
-def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, step=1):
+def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, orient, step=1):
     """
     Calculates the average luminance on a horizontal box surface under an IES light.
     The box is defined by two diagonally opposite 3D points.
@@ -168,7 +172,7 @@ def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, step=1):
         for y in y_coords:
             if x1 <= x <= x2 and y1 <= y <= y2:  # Check if point is inside the box
                 point = (x, y, mh)
-                luminance = calculate_luminance(ies_data, point, h_offset)
+                luminance = calculate_luminance(ies_data, point, h_offset, orient)
                 print(f"Point: {point[0], point[1]}, Luminance: {luminance}")
                 total_luminance += luminance
                 points_x.append(x)
