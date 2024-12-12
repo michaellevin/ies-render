@@ -147,7 +147,7 @@ def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, orient, ste
         step: The spacing between sample points in meters.
 
     Returns:
-        The average luminance on the box surface in cd/m².
+        The average illuminance on the box surface in lm/m².
     """
     ies_parser = IES_Parser(ies_path)
     ies_data = ies_parser.ies_data
@@ -173,7 +173,7 @@ def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, orient, ste
             if x1 <= x <= x2 and y1 <= y <= y2:  # Check if point is inside the box
                 point = (x, y, mh)
                 luminance = calculate_luminance(ies_data, point, h_offset, orient)
-                print(f"Point: {point[0], point[1]}, Luminance: {luminance}")
+                print(f"Point: {point[0], point[1]}, Illuminance: {luminance}")
                 total_luminance += luminance
                 points_x.append(x)
                 points_y.append(y)
@@ -186,7 +186,7 @@ def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, orient, ste
     # Plot luminance distribution
     plt.figure(figsize=(10, 8))
     scatter = plt.scatter(points_x, points_y, c=luminance_values, cmap="viridis", s=50)
-    plt.colorbar(scatter, label="Luminance (cd/m²)")
+    plt.colorbar(scatter, label="Illuminance (lm/m²)")
     # plt.title("Luminance Distribution on Box Surface")
     plt.xlabel("X Coordinate (m)")
     plt.ylabel("Y Coordinate (m)")
@@ -200,7 +200,7 @@ def average_luminance_on_box(ies_path, point1, point2, mh, h_offset, orient, ste
     plt.text(
         0.5,
         1.05,
-        f"Average Luminance: {average_luminance:.4f} cd/m²",
+        f"Average illuminance: {average_luminance:.4f} lm/m²",
         fontsize=12,
         ha="center",
         va="center",

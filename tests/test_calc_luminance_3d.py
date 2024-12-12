@@ -28,7 +28,7 @@ def test_calculate_3d_box_avg():
     point2 = (5, 5)  # Opposite corner of the box
     mh = 6  # height of luminaire
     h_offset = 0.1143
-    orient = -30
+    orient = 45
     avg_luminance = ies_calc.average_luminance_on_box(
         ies_path,
         point1,
